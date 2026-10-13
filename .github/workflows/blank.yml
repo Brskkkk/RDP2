@@ -1,7 +1,6 @@
 name: Windows 10
 
 on:
-  push:
   workflow_dispatch:
 
 permissions:
@@ -10,44 +9,23 @@ permissions:
 jobs:
   build:
     runs-on: windows-latest
-    timeout-minutes: 360
+    timeout-minutes: 350
 
     steps:
-      - name: Download latest stable ngrok
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-
-          Invoke-WebRequest `
-            -Uri 'https://bin.ngrok.com/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip' `
-            -OutFile ngrok.zip
-
-          Expand-Archive -Path ngrok.zip -DestinationPath ngrok -Force
-
-          if (-not (Test-Path '.\ngrok\ngrok.exe')) {
-            throw 'ngrok.exe was not found after extracting the download.'
-          }
-
-      - name: Configure ngrok
-        shell: pwsh
-        env:
-          NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
-        run: |
-          $ErrorActionPreference = 'Stop'
-
-          if ([string]::IsNullOrWhiteSpace($env:NGROK_AUTH_TOKEN)) {
-            throw 'Add NGROK_AUTH_TOKEN in repository Actions secrets.'
-          }
-
-          .\ngrok\ngrok.exe config add-authtoken $env:NGROK_AUTH_TOKEN
+      - name: Connect runner to Tailscale
+        uses: tailscale/github-action@v4
+        with:
+          authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
+          version: latest
 
       - name: Enable Remote Desktop
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
 
+          # Hard-coded at your request. Use a disposable password.
           $password = ConvertTo-SecureString `
-            -AsPlainText 'WinRunner!2026#Rdp' `
+            -AsPlainText 'Cedar!Orbit7#Lantern' `
             -Force
 
           Set-LocalUser -Name 'runneradmin' -Password $password
@@ -64,6 +42,21 @@ jobs:
             -Name 'UserAuthentication' `
             -Value 1
 
-      - name: Start ngrok TCP tunnel
+      - name: Show Tailscale IP
         shell: pwsh
-        run: .\ngrok\ngrok.exe tcp 3389
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $ip = tailscale ip -4
+
+          if ([string]::IsNullOrWhiteSpace($ip)) {
+            throw 'Could not get the runner Tailscale IP.'
+          }
+
+          Write-Host "Connect Windows App to: $($ip.Trim())"
+
+      - name: Keep runner online
+        shell: pwsh
+        run: |
+          while ($true) {
+            Start-Sleep -Seconds 60
+          }
